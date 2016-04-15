@@ -1,0 +1,6 @@
+# spark
+theano
+numpy
+scikit-learn
+scipy
+# Theano
