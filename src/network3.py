@@ -36,10 +36,18 @@ import gzip
 import numpy as np
 import theano
 import theano.tensor as T
+import time
 from theano.tensor.nnet import conv
 from theano.tensor.nnet import softmax
 from theano.tensor import shared_randomstreams
 from theano.tensor.signal import downsample
+
+class TimeLog:
+    def __enter__(self):
+        self.t = time.time()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        print "%.2fs" % (time.time() - self.t)
 
 # Activation functions for neurons
 def linear(z): return z
@@ -160,25 +168,26 @@ class Network(object):
         # Do the actual training
         best_validation_accuracy = 0.0
         for epoch in xrange(epochs):
-            for minibatch_index in xrange(num_training_batches):
-                iteration = num_training_batches * epoch + minibatch_index
-                if iteration % 1000 == 0:
-                    print("Training mini-batch number {0}".format(iteration))
-                cost_ij = train_mb(minibatch_index)
-                if (iteration + 1) % num_training_batches == 0:
-                    validation_accuracy = np.mean(
-                        [validate_mb_accuracy(j) for j in xrange(num_validation_batches)])
-                    print("Epoch {0}: validation accuracy {1:.2%}".format(
-                        epoch, validation_accuracy))
-                    if validation_accuracy >= best_validation_accuracy:
-                        print("This is the best validation accuracy to date.")
-                        best_validation_accuracy = validation_accuracy
-                        best_iteration = iteration
-                        if test_data:
-                            test_accuracy = np.mean(
-                                [test_mb_accuracy(j) for j in xrange(num_test_batches)])
-                            print('The corresponding test accuracy is {0:.2%}'.format(
-                                test_accuracy))
+            with TimeLog():
+                for minibatch_index in xrange(num_training_batches):
+                    iteration = num_training_batches * epoch + minibatch_index
+                    if iteration % 1000 == 0:
+                        print("Training mini-batch number {0}".format(iteration))
+                    cost_ij = train_mb(minibatch_index)
+                    if (iteration + 1) % num_training_batches == 0:
+                        validation_accuracy = np.mean(
+                            [validate_mb_accuracy(j) for j in xrange(num_validation_batches)])
+                        print("Epoch {0}: validation accuracy {1:.2%}".format(
+                            epoch, validation_accuracy))
+                        if validation_accuracy >= best_validation_accuracy:
+                            print("This is the best validation accuracy to date.")
+                            best_validation_accuracy = validation_accuracy
+                            best_iteration = iteration
+                            if test_data:
+                                test_accuracy = np.mean(
+                                    [test_mb_accuracy(j) for j in xrange(num_test_batches)])
+                                print('The corresponding test accuracy is {0:.2%}'.format(
+                                    test_accuracy))
         print("Finished training network.")
         print("Best validation accuracy of {0:.2%} obtained at iteration {1}".format(
             best_validation_accuracy, best_iteration))
@@ -310,3 +319,16 @@ def dropout_layer(layer, p_dropout):
         np.random.RandomState(0).randint(999999))
     mask = srng.binomial(n=1, p=1 - p_dropout, size=layer.shape)
     return layer * T.cast(mask, theano.config.floatX)
+
+if __name__ == '__main__':
+    training_data, validation_data, test_data = load_data_shared()
+    
+    mini_batch_size = 10
+    
+    net = Network([
+        FullyConnectedLayer(n_in=784, n_out=100),
+        SoftmaxLayer(n_in=100, n_out=10)], mini_batch_size)
+    
+    net.SGD(training_data, 60, mini_batch_size, 0.1,
+            validation_data, test_data)
+
